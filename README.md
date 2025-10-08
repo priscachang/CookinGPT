@@ -108,13 +108,9 @@ Content-Type: application/json
 ├── models.py                       # Pydantic data models
 ├── services/
 │   ├── recipe_service.py          # CSV processing and recipe management
-│   ├── recipe_search_service.py   # Recipe search and matching logic
-│   ├── text_extraction.py         # PDF text extraction (legacy)
-│   ├── search_service.py          # General search utilities
-│   └── llm_service.py             # LLM integration
+│   └──  recipe_search_service.py   # Recipe search and matching logic
 ├── utils.py                        # Utility functions
 ├── requirements.txt                # Python dependencies
-├── sample_recipes.csv             # Example recipe data
 └── README.md                      # This file
 ```
 
