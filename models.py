@@ -43,6 +43,11 @@ class IngredientSearchRequest(BaseModel):
     top_k: int = 5
     threshold: float = 0.6
 
+class RecipeSearchRequest(BaseModel):
+    user_input: str
+    top_k: int = 5
+    threshold: float = 0.6
+
 class RecipeRecommendation(BaseModel):
     recipe_id: str
     title: str
@@ -56,3 +61,4 @@ class RecipeSearchResponse(BaseModel):
     recommendations: List[RecipeRecommendation]
     total_matches: int
     processing_time: float
+    parsed_ingredients: Optional[List[str]] = None
