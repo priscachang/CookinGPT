@@ -31,9 +31,25 @@ def find_recipes_by_ingredients(user_ingredients: List[str], top_k: int = 5, thr
             normalized = normalize_ingredients(ingredient)
             user_ingredients_normalized.extend(normalized)
         
+        # Check if we have embeddings available
+        has_embeddings = any(
+            recipe.get("embedding") is not None and 
+            recipe.get("embedding") != [] and 
+            len(recipe.get("embedding", [])) > 0
+            for recipe in recipes_data
+        )
+        
+        if not has_embeddings:
+            print("⚠️  No embeddings available, falling back to keyword search")
+            return find_recipes_by_keywords(user_ingredients, top_k)
+        
         # Create query embedding from user ingredients
         query_text = ", ".join(user_ingredients_normalized)
-        query_embedding = get_embedding(query_text)
+        try:
+            query_embedding = get_embedding(query_text)
+        except Exception as e:
+            print(f"⚠️  Failed to generate query embedding: {e}, falling back to keyword search")
+            return find_recipes_by_keywords(user_ingredients, top_k)
         
         # Calculate similarity scores
         recommendations = []
