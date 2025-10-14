@@ -5,9 +5,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from models import IngredientSearchRequest, RecipeSearchResponse
-from services.recipe_search_service import hybrid_recipe_search
+from models import RecipeIngestionResponse, IngredientSearchRequest, RecipeSearchRequest, RecipeSearchResponse
+from services.recipe_service import process_csv_recipes, generate_ingredient_embeddings, save_recipes_to_kb
+from services.recipe_search_service import hybrid_recipe_search, search_recipes_with_llm_parsing
 from embedded_recipes import initialize_embedded_recipes_kb
+from utils import get_embedding
 from mistralai import Mistral
 
 app = FastAPI(title="Smart Recipe Finder", description="AI-powered recipe recommendation system")
@@ -59,6 +61,36 @@ async def search_recipes_by_ingredients(request: IngredientSearchRequest):
     except Exception as e:
         print(f"Error in recipe search: {e}")
         raise HTTPException(status_code=500, detail=f"Recipe search failed: {str(e)}")
+
+@app.post("/search-recipes-llm", response_model=RecipeSearchResponse)
+async def search_recipes_with_llm(request: RecipeSearchRequest):
+    """Search for recipes using LLM parsing to extract ingredients from natural language input."""
+    import time
+    from services.llm_parsing_service import llm_parsing_service
+    
+    start_time = time.time()
+    
+    try:
+        # Parse user input to get ingredients
+        parsed_ingredients, preferences = llm_parsing_service.parse_user_input(request.user_input)
+        
+        # Find recipes using LLM parsing and hybrid search
+        recommendations = search_recipes_with_llm_parsing(
+            user_input=request.user_input,
+            top_k=request.top_k,
+            threshold=request.threshold
+        )
+        
+        return RecipeSearchResponse(
+            recommendations=recommendations,
+            total_matches=len(recommendations),
+            processing_time=time.time() - start_time,
+            parsed_ingredients=parsed_ingredients
+        )
+        
+    except Exception as e:
+        print(f"Error in LLM recipe search: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM recipe search failed: {str(e)}")
 
 # UI endpoint
 @app.get("/", response_class=HTMLResponse)
@@ -820,13 +852,13 @@ async def get_ui():
                 
                 console.log('Loading state set, making API call...');
                 
-                // Make the API call
-                fetch('/search-recipes', {
+                // Make the API call using LLM parsing
+                fetch('/search-recipes-llm', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        ingredients: ingredientList,
-                        top_k: 3,
+                        user_input: ingredients,
+                        top_k: 10,
                         threshold: 0.6
                     })
                 })
@@ -835,10 +867,15 @@ async def get_ui():
                     console.log('Response result:', result);
                     
                     if (result.recommendations && result.recommendations.length > 0) {
+                        // Use parsed ingredients from LLM output1 if available, otherwise fall back to original input
+                        const displayIngredients = result.parsed_ingredients && result.parsed_ingredients.length > 0 
+                            ? result.parsed_ingredients 
+                            : ingredientList;
+                        
                         let recipesHtml = `
                             <div class="search-results-header">
                                 <h2><i class="fas fa-utensils"></i> Recipe Recommendations</h2>
-                                <p>Found ${result.recommendations.length} recipes for your ingredients: <strong>${ingredientList.join(', ')}</strong></p>
+                                <p>Found ${result.recommendations.length} recipes for your ingredients: <strong>${displayIngredients.join(', ')}</strong></p>
                             </div>
                         `;
                         

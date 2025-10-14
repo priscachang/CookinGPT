@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Dict, Any
 from services.recipe_service import normalize_ingredients, load_recipes_from_kb
+from services.llm_parsing_service import llm_parsing_service
 from utils import get_embedding
 from models import RecipeRecommendation
 
@@ -192,4 +193,51 @@ def hybrid_recipe_search(user_ingredients: List[str], top_k: int = 5, threshold:
         
     except Exception as e:
         print(f"Error in hybrid_recipe_search: {e}")
+        return []
+
+def search_recipes_with_llm_parsing(user_input: str, top_k: int = 5, threshold: float = 0.6) -> List[RecipeRecommendation]:
+    """
+    Search for recipes using LLM parsing to extract ingredients from user input.
+    
+    Args:
+        user_input: Raw user input describing ingredients and preferences
+        top_k: Number of top results to return
+        threshold: Similarity threshold for semantic search
+        
+    Returns:
+        List of recipe recommendations
+    """
+    try:
+        # Use LLM parsing service to extract ingredients from user input
+        extracted_ingredients, preferences = llm_parsing_service.parse_user_input(user_input)
+        
+        print(f"LLM Parsed ingredients: {extracted_ingredients}")
+        print(f"LLM Parsed preferences: {preferences}")
+        
+        # If no ingredients were extracted, try fallback parsing
+        if not extracted_ingredients:
+            print("No ingredients extracted by LLM, falling back to input parsing")
+            # Split the input by common delimiters as fallback
+            extracted_ingredients = [ing.strip() for ing in user_input.split(',') if ing.strip()]
+        
+        # Use the extracted ingredients for hybrid search
+        if extracted_ingredients:
+            recommendations = hybrid_recipe_search(extracted_ingredients, top_k, threshold)
+            
+            # Add preferences context to recommendations if available
+            if preferences:
+                print(f"User preferences noted: {preferences}")
+                # Preferences could be used for future filtering or ranking
+            
+            return recommendations
+        else:
+            print("No ingredients found in user input")
+            return []
+            
+    except Exception as e:
+        print(f"Error in search_recipes_with_llm_parsing: {e}")
+        # Fallback to direct input parsing
+        fallback_ingredients = [ing.strip() for ing in user_input.split(',') if ing.strip()]
+        if fallback_ingredients:
+            return hybrid_recipe_search(fallback_ingredients, top_k, threshold)
         return []
