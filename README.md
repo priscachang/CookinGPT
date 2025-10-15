@@ -221,44 +221,6 @@ The system comes with 15 pre-loaded recipes covering various cuisines:
 - Update API keys and model names
 - Adjust vector dimensions as needed
 
-## 🚨 Troubleshooting
-
-### **Common Issues**
-
-**No recipes found:**
-
-- Try lowering the similarity threshold (0.3-0.5)
-- Add more specific ingredients
-- Check for typos in ingredient names
-
-**API errors:**
-
-- Verify your Mistral API key is correct
-- Check your internet connection
-- Ensure you have sufficient API credits
-
-**Slow performance:**
-
-- The first search may be slower due to embedding generation
-- Subsequent searches are much faster
-- Consider using fewer ingredients for faster results
-
-### **Debug Mode**
-
-Enable detailed logging by setting environment variables:
-
-```bash
-export DEBUG=true
-python app.py
-```
-
-## 📊 Performance
-
-- **Initialization**: ~2-3 seconds for embedded recipes
-- **Search Speed**: <1 second for most queries
-- **Embedding Generation**: ~0.5 seconds per query
-- **Memory Usage**: ~50MB for full recipe database
-- **Concurrent Users**: Supports multiple simultaneous searches
 
 ## 🔮 Future Enhancements
 
@@ -272,10 +234,6 @@ python app.py
 ## 📄 License
 
 This project is part of the "Business in LLM" course at Columbia University.
-
-## 🤝 Contributing
-
-This is an educational project. For questions or improvements, please contact the development team.
 
 ---
 
