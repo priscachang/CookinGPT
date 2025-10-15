@@ -1,13 +1,14 @@
 import os
 import json
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from models import RecipeIngestionResponse, IngredientSearchRequest, RecipeSearchRequest, RecipeSearchResponse
 from services.recipe_service import process_csv_recipes, generate_ingredient_embeddings, save_recipes_to_kb
 from services.recipe_search_service import hybrid_recipe_search, search_recipes_with_llm_parsing
+from embedded_recipes import initialize_embedded_recipes_kb
 from utils import get_embedding
 from mistralai import Mistral
 
@@ -26,56 +27,16 @@ if not MISTRAL_API_KEY:
 
 llm_client = Mistral(api_key=MISTRAL_API_KEY)
 
-# Recipe endpoints
-@app.post("/ingest-recipes", response_model=RecipeIngestionResponse)
-async def ingest_recipes_csv(files: list[UploadFile] = File(...)):
-    """Ingest recipe CSV files and create embeddings for ingredients."""
-    import time
-    start_time = time.time()
-    
-    processed_files = []
-    total_recipes = 0
-    
-    for file in files:
-        try:
-            if not file.filename.endswith('.csv'):
-                print(f"Skipping {file.filename}: Not a CSV file")
-                continue
-            
-            # Save uploaded file temporarily
-            temp_file_path = f"temp_{file.filename}"
-            with open(temp_file_path, "wb") as buffer:
-                content = await file.read()
-                buffer.write(content)
-            
-            # Process CSV file
-            recipes = process_csv_recipes(temp_file_path)
-            print(f"Processed {len(recipes)} recipes from {file.filename}")
-            
-            # Generate embeddings for ingredients
-            recipes_with_embeddings = generate_ingredient_embeddings(recipes)
-            
-            # Save to recipe knowledge base
-            save_recipes_to_kb(recipes_with_embeddings)
-            
-            processed_files.append(file.filename)
-            total_recipes += len(recipes_with_embeddings)
-            
-            # Clean up temp file
-            os.remove(temp_file_path)
-            
-        except Exception as e:
-            print(f"Error processing {file.filename}: {e}")
-            continue
-    
-    if not processed_files:
-        raise HTTPException(status_code=400, detail="No valid CSV files processed")
-    
-    return RecipeIngestionResponse(
-        status="success",
-        recipes_processed=total_recipes,
-        total_recipes=total_recipes
-    )
+# Initialize embedded recipes on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the application with embedded recipes."""
+    print("🚀 Starting Smart Recipe Finder...")
+    success = initialize_embedded_recipes_kb()
+    if success:
+        print("🎉 Smart Recipe Finder is ready!")
+    else:
+        print("❌ Failed to initialize Smart Recipe Finder")
 
 @app.post("/search-recipes", response_model=RecipeSearchResponse)
 async def search_recipes_by_ingredients(request: IngredientSearchRequest):
@@ -249,17 +210,9 @@ async def get_ui():
             
             
             .main-content {
-                display: grid;
-                grid-template-columns: 400px 1fr;
+                display: flex;
+                flex-direction: column;
                 min-height: calc(100vh - 200px);
-                gap: 0;
-            }
-            
-            .sidebar {
-                background: #f8fafc;
-                border-right: 1px solid #e2e8f0;
-                padding: 2.5rem;
-                overflow-y: auto;
             }
             
             .chat-area {
@@ -268,162 +221,6 @@ async def get_ui():
                 flex-direction: column;
             }
             
-            .upload-section {
-                background: #ffffff;
-                border-radius: 16px;
-                padding: 2rem; 
-                margin-bottom: 2rem;
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-                border: 1px solid #e2e8f0;
-                transition: all 0.3s ease;
-            }
-            
-            .upload-section:hover {
-                border-color: #FF6B2C;
-                box-shadow: 0 10px 25px -3px rgba(255, 107, 44, 0.1), 0 4px 6px -2px rgba(255, 107, 44, 0.05);
-                transform: translateY(-2px);
-            }
-            
-            .upload-section h3 {
-                color: #1e293b;
-                margin-bottom: 1.5rem;
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
-                font-size: 1.25rem;
-                font-weight: 700;
-                letter-spacing: -0.025em;
-            }
-            
-            .upload-box {
-                width: 100%;
-                padding: 2.5rem;
-                border: 2px dashed #cbd5e1;
-                border-radius: 12px;
-                background: #f8fafc;
-                text-align: center;
-                transition: all 0.3s ease;
-                cursor: pointer;
-                margin: 1.5rem 0;
-            }
-            
-            .upload-box:hover {
-                border-color: #FF6B2C;
-                background: linear-gradient(135deg, #fff7ed, #fed7aa);
-                transform: scale(1.01);
-            }
-            
-            .upload-icon {
-                font-size: 2rem;
-                color: #64748b;
-                margin-bottom: 0.75rem;
-            }
-            
-            .upload-text {
-                font-size: 1rem;
-                color: #64748b;
-                margin-bottom: 1.5rem;
-                font-weight: 500;
-                line-height: 1.6;
-            }
-            
-            .browse-btn {
-                display: inline-block;
-                padding: 0.5rem 1rem;
-                background: linear-gradient(135deg, #FF6B2C, #FFB68A);
-                color: white;
-                border-radius: 8px;
-                cursor: pointer;
-                text-decoration: none;
-                font-size: 0.875rem;
-                font-weight: 500;
-                transition: all 0.3s ease;
-                border: none;
-                box-shadow: 0 2px 8px rgba(255, 107, 44, 0.3);
-                position: relative;
-                overflow: hidden;
-            }
-            
-            .browse-btn::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: -100%;
-                width: 100%;
-                height: 100%;
-                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-                transition: left 0.5s;
-            }
-            
-            .browse-btn:hover::before {
-                left: 100%;
-            }
-            
-            .browse-btn:hover {
-                background: linear-gradient(135deg, #e55a1f, #ff9f6b);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 15px rgba(255, 107, 44, 0.4);
-            }
-            
-            .browse-btn:focus {
-                outline: 2px solid #FF6B2C;
-                outline-offset: 2px;
-            }
-            
-            .upload-btn {
-                width: 100%;
-                padding: 0.75rem;
-                background: linear-gradient(135deg, #FF6B2C, #FFB68A);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                font-weight: 500;
-                font-size: 0.875rem;
-                transition: all 0.3s ease;
-                margin-top: 1rem;
-                box-shadow: 0 2px 8px rgba(255, 107, 44, 0.3);
-                position: relative;
-                overflow: hidden;
-            }
-            
-            .upload-btn::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: -100%;
-                width: 100%;
-                height: 100%;
-                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-                transition: left 0.5s;
-            }
-            
-            .upload-btn:hover::before {
-                left: 100%;
-            }
-            
-            .upload-btn:hover {
-                background: linear-gradient(135deg, #e55a1f, #ff9f6b);
-                transform: translateY(-2px);
-                box-shadow: 0 4px 15px rgba(255, 107, 44, 0.4);
-            }
-            
-            .upload-btn:focus {
-                outline: 2px solid #FF6B2C;
-                outline-offset: 2px;
-            }
-            
-            .upload-options {
-                display: flex;
-                gap: 10px;
-                margin-top: 10px;
-            }
-            
-            .upload-options .upload-btn {
-                flex: 1;
-                font-size: 0.9em;
-                padding: 10px;
-            }
             
             .ingredient-search-section {
                 background: #2c2c2c;
@@ -950,25 +747,17 @@ async def get_ui():
             }
             
             @media (max-width: 768px) {
-                .main-content {
-                    flex-direction: column;
-                }
-                
-                .sidebar {
-                    width: 100%;
-                    order: 2;
-                }
-                
-                .chat-area {
-                    order: 1;
-                }
-                
                 .header h1 {
                     font-size: 2em;
                 }
                 
-                .message {
-                    max-width: 95%;
+                .ingredient-input-main {
+                    flex-direction: column;
+                    gap: 1rem;
+                }
+                
+                .main-search-btn {
+                    width: 100%;
                 }
             }
         </style>
@@ -986,22 +775,6 @@ async def get_ui():
             </div>
             
             <div class="main-content">
-                <div class="sidebar">
-                    <div class="upload-section">
-                        <h3><i class="fas fa-upload"></i> Upload Recipe Database</h3>
-                        <div class="upload-box" id="uploadArea">
-                            <div class="upload-icon">📄</div>
-                            <div class="upload-text">Drag & Drop your CSV recipe file here</div>
-                            <label class="browse-btn" for="fileInput">Browse CSV File</label>
-                            <input type="file" id="fileInput" accept=".csv" style="display: none;">
-                        </div>
-                        <button class="upload-btn" onclick="uploadRecipes()" id="uploadBtn" disabled>
-                            <i class="fas fa-utensils"></i> Upload Recipes
-                        </button>
-                        <div id="uploadStatus"></div>
-                    </div>
-                        </div>
-                        
                 <div class="main-recipe-area">
                     <div class="ingredient-search-main">
                         <div class="main-search-box">
@@ -1022,21 +795,17 @@ async def get_ui():
                                     <img src="/static/logo.png" alt="Logo" class="welcome-logo" onerror="this.style.display='none'">
                                 </div>
                                 <h3>Welcome to Smart Recipe Finder!</h3>
-                                <p>Upload your recipe database and discover amazing recipes with your ingredients.</p>
+                                <p>Discover amazing recipes from our curated collection using your available ingredients.</p>
                                 <div class="steps">
                                     <div class="step">
                                         <span class="step-number">1</span>
-                                        <span><i class="fas fa-upload"></i> Upload CSV</span>
-                        </div>
+                                        <span><i class="fas fa-search"></i> Enter your ingredients</span>
+                                    </div>
                                     <div class="step">
                                         <span class="step-number">2</span>
-                                        <span><i class="fas fa-search"></i> Enter ingredients</span>
-                    </div>
-                                    <div class="step">
-                                        <span class="step-number">3</span>
-                                        <span><i class="fas fa-magic"></i> Get recipes!</span>
-                </div>
-                        </div>
+                                        <span><i class="fas fa-magic"></i> Get personalized recipes!</span>
+                                    </div>
+                                </div>
                     </div>
                         </div>
                     </div>
@@ -1167,102 +936,8 @@ async def get_ui():
             }
             
             document.addEventListener('DOMContentLoaded', function() {
-                const uploadArea = document.getElementById('uploadArea');
-                const fileInput = document.getElementById('fileInput');
-                const uploadBtn = document.getElementById('uploadBtn');
-                const uploadStatus = document.getElementById('uploadStatus');
-                
-                let selectedFile = null;
-                
-                // Click to select file
-                uploadArea.addEventListener('click', () => {
-                    fileInput.click();
-                });
-                
-                // File input change
-                fileInput.addEventListener('change', (e) => {
-                    if (e.target.files.length > 0) {
-                        selectedFile = e.target.files[0];
-                        if (selectedFile.name.endsWith('.csv')) {
-                            uploadBtn.disabled = false;
-                            uploadStatus.innerHTML = `<div class="status-message status-info"><i class="fas fa-check-circle"></i> Selected: ${selectedFile.name}</div>`;
-                        } else {
-                            uploadBtn.disabled = true;
-                            uploadStatus.innerHTML = '<div class="status-message status-error"><i class="fas fa-exclamation-triangle"></i> Please select a CSV file</div>';
-                        }
-                    }
-                });
-                
-                // Drag and drop functionality
-                uploadArea.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    uploadArea.classList.add('dragover');
-                });
-                
-                uploadArea.addEventListener('dragleave', (e) => {
-                    e.preventDefault();
-                    uploadArea.classList.remove('dragover');
-                });
-                
-                uploadArea.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    uploadArea.classList.remove('dragover');
-                    if (e.dataTransfer.files.length > 0) {
-                        selectedFile = e.dataTransfer.files[0];
-                        if (selectedFile.name.endsWith('.csv')) {
-                        uploadBtn.disabled = false;
-                            uploadStatus.innerHTML = `<div class="status-message status-info"><i class="fas fa-check-circle"></i> Selected: ${selectedFile.name}</div>`;
-                    } else {
-                        uploadBtn.disabled = true;
-                            uploadStatus.innerHTML = '<div class="status-message status-error"><i class="fas fa-exclamation-triangle"></i> Please select a CSV file</div>';
-                        }
-                    }
-                });
-                
-                // Upload recipes function
-                window.uploadRecipes = async function() {
-                    if (!selectedFile) {
-                        uploadStatus.innerHTML = '<div class="status-message status-error"><i class="fas fa-exclamation-triangle"></i> Please select a CSV file first</div>';
-                        return;
-                    }
-                    
-                    const formData = new FormData();
-                    formData.append('files', selectedFile);
-                    
-                    uploadStatus.innerHTML = '<div class="status-message status-info"><div class="loading"></div> Uploading and processing recipes...</div>';
-                    
-                    try {
-                        const response = await fetch('/ingest-recipes', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (response.ok) {
-                            uploadStatus.innerHTML = `<div class="status-message status-success"><i class="fas fa-check-circle"></i> Successfully processed ${result.recipes_processed} recipes!</div>`;
-                            
-                            // Show success message in results area
-                            const resultsContainer = document.getElementById('resultsContainer');
-                            resultsContainer.innerHTML = `
-                                <div class="success-message">
-                                    <i class="fas fa-check-circle"></i>
-                                    <h3>Recipes Uploaded Successfully!</h3>
-                                    <p>${result.recipes_processed} recipes are now available. You can start searching for recipes by entering your ingredients above.</p>
-                                </div>
-                            `;
-                            
-                            // Clear selected file
-                            selectedFile = null;
-                            uploadBtn.disabled = true;
-                            fileInput.value = '';
-                        } else {
-                            uploadStatus.innerHTML = `<div class="status-message status-error"><i class="fas fa-times-circle"></i> Error: ${result.detail || 'Upload failed'}</div>`;
-                        }
-                    } catch (error) {
-                        uploadStatus.innerHTML = `<div class="status-message status-error"><i class="fas fa-times-circle"></i> Upload failed: ${error.message}</div>`;
-                    }
-                };
+                // Application is ready with embedded recipes
+                console.log('Smart Recipe Finder is ready with embedded recipes!');
             });
         </script>
     </body>
